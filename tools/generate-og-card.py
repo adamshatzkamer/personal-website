@@ -5,10 +5,15 @@ Default (no args): regenerate the homepage card at assets/img/og-card.jpg
 (portrait + name/title), then every article/index card listed in CARDS.
 
 Article cards: dark IIoT grid, section eyebrow, wrapped headline, domain.
-Requires Pillow + TTFs in tools/fonts/ (see README / original script header).
+Cards with a ``visual`` (a screenshot/diagram from the page itself) render a
+two-panel layout: brand text on the left, the page's own diagram on the
+right, plus a reading-time line. Cards without a visual keep the text-only
+layout. Requires Pillow + TTFs in tools/fonts/ (see README / original script
+header).
 
     python3 tools/generate-og-card.py          # all cards
     python3 tools/generate-og-card.py --home   # homepage only
+    python3 tools/generate-og-card.py --articles note-ignition-alarms
     make og-cards
 """
 from __future__ import annotations
@@ -34,7 +39,10 @@ HOME_CTA = "Get in touch →"
 DOMAIN = "samdonche.com"
 HOME_OUT = Path("assets/img/og-card.jpg")
 
-# Per-page cards (slug → eyebrow, title). Output: assets/img/og/<slug>.jpg
+# Per-page cards (slug → eyebrow, title, optional visual + reading minutes).
+# Output: assets/img/og/<slug>.jpg. ``visual`` is an image from the page's own
+# content (screenshot, diagram or animation poster); ``minutes`` is the article
+# reading time shown on the card.
 CARDS = [
     {"slug": "notes", "eyebrow": "NOTES", "title": "Field notes on industrial digital architecture"},
     {"slug": "case-studies", "eyebrow": "CASE STUDIES", "title": "Selected work on the plant floor"},
@@ -43,71 +51,99 @@ CARDS = [
         "slug": "ignition-secrets",
         "eyebrow": "NOTE",
         "title": "Ignition credentials belong in your secrets manager",
+        "visual": "assets/img/notes/designer-light.jpg",
+        "minutes": 5,
     },
     {
         "slug": "ignition-observability",
         "eyebrow": "NOTE",
         "title": "Put your Ignition gateway on the same dashboards as everything else",
+        "visual": "assets/img/notes/shot-observability.jpg",
+        "minutes": 3,
     },
     {
         "slug": "ignition-historian",
         "eyebrow": "NOTE",
         "title": "Tag history that stays fast when retention gets long",
+        "visual": "assets/img/notes/shot-historian.jpg",
+        "minutes": 2,
     },
     {
         "slug": "ignition-amqp",
         "eyebrow": "NOTE",
         "title": "Stop scripting RabbitMQ inside Ignition",
+        "visual": "assets/img/notes/shot-amqp.jpg",
+        "minutes": 2,
     },
     {
         "slug": "ignition-alarms",
         "eyebrow": "NOTE",
         "title": "Page the channel the crew actually watches",
+        "visual": "assets/img/notes/designer-dark.jpg",
+        "minutes": 3,
     },
     {
         "slug": "ignition-perspective",
         "eyebrow": "NOTE",
         "title": "Fourteen Perspective components the platform never shipped",
+        "visual": "assets/img/notes/poster-panzoom.jpg",
+        "minutes": 2,
     },
     {
         "slug": "ignition-doom",
         "eyebrow": "NOTE",
         "title": "Yes, your Ignition gateway can run Doom",
+        "visual": "assets/img/notes/doom-control-room.jpg",
+        "minutes": 2,
     },
     {
         "slug": "ignition-dark-mode",
         "eyebrow": "NOTE",
         "title": "A dark Ignition Designer from one menu item",
+        "visual": "assets/img/notes/designer-light.jpg",
+        "minutes": 2,
     },
     {
         "slug": "ignition-modules",
         "eyebrow": "NOTE",
         "title": "Ignition modules for the gaps the platform leaves",
+        "visual": "assets/img/notes/poster-grid.jpg",
+        "minutes": 6,
     },
     {
         "slug": "mqtt-sparkplug-b",
         "eyebrow": "NOTE",
         "title": "MQTT and Sparkplug B: why factories stopped polling",
+        "visual": "assets/img/notes/poster-timeline.jpg",
+        "minutes": 8,
     },
     {
         "slug": "mes-scada-vs-historian",
         "eyebrow": "NOTE",
         "title": "MES vs SCADA vs historian: what actually goes where",
+        "visual": "assets/img/notes/shot-grid.jpg",
+        "minutes": 5,
     },
     {
         "slug": "factory-data-backbone",
         "eyebrow": "CASE STUDY",
         "title": "From data islands to a factory-wide backbone",
+        "visual": "assets/img/notes/poster-grid.jpg",
+        "minutes": 3,
     },
     {
         "slug": "plant-hmi",
         "eyebrow": "CASE STUDY",
         "title": "A chocolate plant in a browser tab",
+        "visual": "assets/img/work/plant-hmi.jpg",
+        "minutes": 5,
     },
     {
         "slug": "plant",
         "eyebrow": "PLANT LIVE VIEW",
         "title": "Line 3 — simulated packaging line at the edge",
+        "visual": "assets/img/work/plant-hmi.jpg",
+        "minutes": None,
     },
 ]
 
@@ -230,15 +266,16 @@ def generate_home() -> None:
     save(img, HOME_OUT)
 
 
-def generate_article(slug: str, eyebrow: str, title: str) -> None:
+def generate_article(slug: str, eyebrow: str, title: str, visual: str | None = None, minutes: int | None = None) -> None:
     img, d = base_canvas()
     eyebrow_f = font("jbm-500.ttf", 26)
     title_f = font("inter-800.ttf", 64)
     mono_f = font("jbm-400.ttf", 28)
     name_f = font("inter-600.ttf", 32)
+    tiny_f = font("jbm-500.ttf", 20)
 
     LX = 90 * S
-    max_w = W - 2 * LX
+    max_w = (W - 2 * LX) if not visual else int((W - 2 * LX) * 0.58)
 
     ey_y = 120 * S
     d.line([(LX, ey_y + 16 * S), (LX + 56 * S, ey_y + 16 * S)], fill=CYAN, width=2 * S)
@@ -255,6 +292,50 @@ def generate_article(slug: str, eyebrow: str, title: str) -> None:
     for line in lines:
         d.text((LX, y), line, font=title_f, fill=WHITE)
         y += line_h
+
+    # Visual panel: the page's own screenshot/diagram on the right half
+    if visual:
+        panel_x = int(W * 0.60)
+        panel_w = W - panel_x - 60 * S
+        panel_h = int(panel_w * 0.72)
+        panel_y = (H - panel_h) // 2 + 20 * S
+        try:
+            shot = Image.open(visual)
+            # cover-crop into the panel box
+            scale = max(panel_w / shot.width, panel_h / shot.height)
+            sw, sh = int(shot.width * scale), int(shot.height * scale)
+            shot = shot.resize((sw, sh), Image.LANCZOS)
+            left = (sw - panel_w) // 2
+            top = (sh - panel_h) // 2
+            shot = shot.crop((left, top, left + panel_w, top + panel_h))
+            panel = Image.new("RGB", (panel_w, panel_h), CARD_BG)
+            panel.paste(shot, (0, 0))
+            d.rounded_rectangle(
+                [panel_x, panel_y, panel_x + panel_w, panel_y + panel_h],
+                radius=14 * S, fill=CARD_BG, outline=BORDER, width=2 * S,
+            )
+            mask = Image.new("L", (panel_w, panel_h), 0)
+            ImageDraw.Draw(mask).rounded_rectangle([0, 0, panel_w, panel_h], radius=12 * S, fill=255)
+            img.paste(panel, (panel_x, panel_y), mask)
+            # header strip label on the panel
+            d.rounded_rectangle(
+                [panel_x + 16 * S, panel_y + 16 * S, panel_x + 138 * S, panel_y + 46 * S],
+                radius=8 * S, fill=CARD_BG, outline=CYAN, width=1 * S,
+            )
+            tracked(d, (panel_x + 24 * S, panel_y + 23 * S), "FIG/PREVIEW", tiny_f, CYAN_L, tracking=2)
+            d.rounded_rectangle(
+                [panel_x, panel_y, panel_x + panel_w, panel_y + panel_h],
+                radius=14 * S, outline=BORDER, width=2 * S,
+            )
+        except Exception as e:  # noqa: BLE001 - be resilient; keep text-only card
+            print(f"  (visual panel skipped for {slug}: {e})")
+
+    # Reading-time line
+    if minutes:
+        rt_f = font("jbm-500.ttf", 26)
+        rt_y = y + 12 * S
+        d.ellipse([LX, rt_y + 12 * S, LX + 14 * S, rt_y + 26 * S], fill=ACCENT)
+        tracked(d, (LX + 30 * S, rt_y), f"{minutes} MIN READ", rt_f, SLATE3, tracking=2)
 
     # Footer brand strip
     foot_y = H - 100 * S
@@ -273,20 +354,33 @@ def generate_article(slug: str, eyebrow: str, title: str) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--home", action="store_true", help="homepage card only")
-    ap.add_argument("--articles", action="store_true", help="article/index cards only")
+    ap.add_argument("--articles", nargs="*", metavar="SLUG", help="article cards only (default: all); pass slugs to select")
+    ap.add_argument("--list", action="store_true", help="list card slugs")
     args = ap.parse_args()
-    do_home = args.home or not args.articles
-    do_articles = args.articles or not args.home
-    if args.home and args.articles:
-        do_home = do_articles = True
-    if not args.home and not args.articles:
-        do_home = do_articles = True
 
-    if do_home:
-        generate_home()
-    if do_articles:
+    if args.list:
         for card in CARDS:
-            generate_article(card["slug"], card["eyebrow"], card["title"])
+            print(card["slug"])
+        return 0
+
+    if args.home:
+        generate_home()
+        return 0
+
+    if args.articles:
+        slugs = set(args.articles)
+        selected = [c for c in CARDS if c["slug"] in slugs]
+        missing = slugs - {c["slug"] for c in selected}
+        if missing:
+            print(f"unknown slugs: {sorted(missing)}")
+            return 2
+        for card in selected:
+            generate_article(card["slug"], card["eyebrow"], card["title"], card.get("visual"), card.get("minutes"))
+        return 0
+
+    generate_home()
+    for card in CARDS:
+        generate_article(card["slug"], card["eyebrow"], card["title"], card.get("visual"), card.get("minutes"))
     return 0
 
 
